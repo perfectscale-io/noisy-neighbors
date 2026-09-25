@@ -1,0 +1,10 @@
+apiVersion: v2
+name: noisy-tenants
+description: >-
+  Five deliberately misbehaving tenants, co-located on one node, so that every
+  failure mode noisy-neighbors reports can be produced on demand and checked
+  against a known answer.
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords: [multi-tenancy, noisy-neighbors, lab]

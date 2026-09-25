@@ -1,0 +1,13 @@
+# A deliberately multi-tenant cluster.
+#
+# Three workers, because co-tenancy is the whole subject: a single-node cluster
+# has nothing to show. The tenant manifests pin themselves to noisy-lab-worker
+# so the blast radius lands somewhere predictable.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: noisy-lab
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+  - role: worker

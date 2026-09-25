@@ -1,0 +1,57 @@
+# metrics-server -- tier 1 for noisy-neighbors (metrics.k8s.io).
+#
+# EKS does not ship it. Without it the tool still runs, but every
+# usage-versus-request finding disappears: no aggressors, no stranded
+# capacity, no real node saturation.
+
+replicas: 2                 # survives a node roll; the API is aggregated
+                            # and a gap in it makes the scan degrade
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Left empty on purpose. The chart's defaultArgs already set
+# --kubelet-preferred-address-types, --kubelet-use-node-status-port and
+# --metric-resolution; anything added here is appended to those, so repeating
+# one just puts a duplicate flag on the command line.
+args: []
+  # NOTE: --kubelet-insecure-tls is deliberately NOT set here.
+  # EKS worker kubelets present self-signed serving certificates unless
+  # serverTLSBootstrap is enabled and the CSRs are approved, so this may need
+  # to be added. scripts/up.sh checks whether metrics actually flow and, if
+  # they do not, patches the flag in and says so loudly rather than shipping
+  # an unverified TLS bypass by default.
+  #
+  # Verified on EKS 1.36 / AL2023: metrics.k8s.io serves correctly without it,
+  # so the bypass stays off.
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 200Mi
+  limits:
+    memory: 400Mi
+
+# Not on Karpenter-provisioned nodes: metrics-server on a node Karpenter may
+# consolidate is a scan that intermittently loses tier 1.
+nodeSelector:
+  noisy-neighbors.io/pool: system
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: metrics-server

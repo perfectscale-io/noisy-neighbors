@@ -1,0 +1,30 @@
+# Karpenter controller.
+#
+# settings.clusterName / settings.interruptionQueue are injected on the helm
+# command line by scripts/up.sh, because they are derived from env.sh.
+
+replicas: 2
+
+controller:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      memory: 512Mi
+
+# Karpenter must not run on a node Karpenter manages: consolidating its own
+# node mid-decision is how you get a cluster that will not scale back up. The
+# chart's default affinity already excludes karpenter.sh/nodepool nodes; this
+# pins it positively to the managed system group as well.
+nodeSelector:
+  noisy-neighbors.io/pool: system
+
+podDisruptionBudget:
+  name: karpenter
+  maxUnavailable: 1
+
+serviceMonitor:
+  enabled: false
+
+logLevel: info

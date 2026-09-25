@@ -1,0 +1,17 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- range .Values.tenants }}
+---
+# Default-deny ingress. These workloads serve nothing and talk to nobody, so
+# the correct blast radius for a compromised tenant is zero. Egress is left
+# open: denying it would also break DNS, and this chart is not the place to
+# hand-maintain a DNS allowlist.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: {{ include "noisy.ns" . }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+{{- end }}
+{{- end }}

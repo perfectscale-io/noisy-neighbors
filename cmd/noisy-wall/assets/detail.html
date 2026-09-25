@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>noisy-neighbors</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/detail.css">
+</head>
+<body data-stage="3">
+
+<header id="top">
+  <div class="brand">
+    <span class="dot" id="livedot"></span>
+    <h1>noisy&#8209;neighbors</h1>
+    <span class="src" id="source">connecting</span>
+  </div>
+  <div class="tiers" id="tiers"></div>
+  <div class="clock">
+    <span id="nodecount"></span>
+    <span id="stamp">&mdash;</span>
+  </div>
+</header>
+
+<!-- The legend earns its place only because the geometry is the argument:
+     tile size is the promise, fill is the reality. -->
+<section id="legend">
+  <div class="lg"><i class="sw size"></i><span>tile size = <b>requested</b></span></div>
+  <div class="lg"><i class="sw fill"></i><span>fill = <b>actually using</b></span></div>
+  <div class="lg"><i class="sw r-aggressor"></i><span>aggressor</span></div>
+  <div class="lg"><i class="sw r-stranded"></i><span>stranded</span></div>
+  <div class="lg"><i class="sw r-throttled"></i><span>throttled</span></div>
+  <div class="lg"><i class="sw r-oom"></i><span>OOMKilled</span></div>
+  <div class="lg"><i class="sw r-besteffort"></i><span>BestEffort</span></div>
+</section>
+
+<main>
+  <div id="nodes"></div>
+
+  <aside id="rail">
+    <div class="panel" id="blast">
+      <h2>Blast radius</h2>
+      <div class="findings" id="findings">
+        <p class="quiet">Nothing to report on this frame.</p>
+      </div>
+    </div>
+
+    <div class="panel" id="eventpanel">
+      <h2>Events</h2>
+      <ol class="events" id="events"></ol>
+    </div>
+
+    <div class="panel" id="notmeasured" hidden>
+      <h2>Not measured</h2>
+      <ul id="nmlist"></ul>
+    </div>
+  </aside>
+</main>
+
+<section id="tenants">
+  <table>
+    <thead>
+      <tr>
+        <th>Namespace</th><th class="n">Pods</th>
+        <th class="n">Req CPU</th><th class="n">Req mem</th>
+        <th class="n">Used CPU</th><th class="n">Used mem</th>
+        <th class="n">Stranded mem</th><th class="n">OOM</th><th class="n">Throttled</th>
+      </tr>
+    </thead>
+    <tbody id="tenantrows"></tbody>
+  </table>
+  <p class="foot">stranded mem = requested but unused, at a ratio the scheduler will not offer to anyone else</p>
+</section>
+
+<div id="keys">
+  <kbd>1</kbd> names <kbd>2</kbd> requests <kbd>3</kbd> + usage
+  <kbd>4</kbd> tenant view <kbd>B</kbd> button <kbd>R</kbd> reset <kbd>?</kbd> help <kbd>Esc</kbd> back to the simple view
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="/assets/detail.js"></script>
+</body>
+</html>

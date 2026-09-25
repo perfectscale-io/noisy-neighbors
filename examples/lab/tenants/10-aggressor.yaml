@@ -1,0 +1,36 @@
+# team-payments: the aggressor.
+#
+# Requests 64Mi and no limit, then allocates ~700Mi of tmpfs (which the kernel
+# charges to the pod's memory cgroup) and burns a core. The scheduler placed
+# this pod believing it needed 64Mi, so every other tenant on the node was
+# packed around a number that was wrong by an order of magnitude.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingest
+  namespace: team-payments
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: ingest } }
+  template:
+    metadata: { labels: { app: ingest } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: noisy-lab-worker }
+      volumes:
+        - name: ram
+          emptyDir: { medium: Memory, sizeLimit: 1Gi }
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              dd if=/dev/zero of=/ram/fill bs=1M count=700 2>/dev/null
+              while :; do :; done
+          volumeMounts: [{ name: ram, mountPath: /ram }]
+          resources:
+            requests:
+              memory: 64Mi
+              cpu: 50m
+            # No limits at all: nothing stops this container from taking
+            # whatever the node has left.

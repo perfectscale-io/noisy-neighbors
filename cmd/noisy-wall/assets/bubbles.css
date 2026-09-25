@@ -1,0 +1,269 @@
+/* The bubble view.
+ *
+ * One node drawn as a box, its tenants drawn inside it as circles. Per tenant:
+ * a dashed ring whose AREA is what it asked the scheduler for, and a solid
+ * disc whose AREA is what it is actually using.
+ *
+ * Area, not radius. Radius would exaggerate every difference by squaring it:
+ * a tenant using four times its request would look sixteen times worse, which
+ * is the kind of flattering exaggeration that gets a demo picked apart.
+ *
+ * Positions are computed once per set of tenants and then held. Circles that
+ * re-pack themselves every poll look alive and make the thing being pointed at
+ * impossible to follow, so only the radii move, and a slow idle drift does the
+ * work that re-packing would otherwise be doing.
+ *
+ * Light, and committed to it: this follows the intro page in a projected talk,
+ * and a lit room washes out a dark ground far worse than it does a light one.
+ * Every color is painted explicitly so the page holds on any host ground.
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f6f8fc;
+  --box: #ffffff;
+  --ink: #121a26;
+  --ink-2: #4b5869;
+  --ink-3: #7c8799;
+  --line: #dde4ef;
+
+  /* Semantic, and darkened from the dark theme's values: the same hues at the
+     same lightness lose their contrast entirely against white. */
+  --ok: #157a74;
+  --aggressor: #cb3030;
+  --oom: #c01f4f;
+  --throttled: #9a6510;
+  --idle: #5a6b86;
+  --besteffort: #6d4bb8;
+
+  /* The halo behind SVG labels. On a dark ground this was near-black; on a
+     light one it has to flip, or every caption gets a dark outline. */
+  --halo: rgba(255,255,255,.92);
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; min-height: 100%;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+main { max-width: 1160px; margin: 0 auto; padding: 5vh 28px 110px; }
+
+h1 {
+  font-size: clamp(25px, 3.2vw, 38px);
+  font-weight: 600; letter-spacing: -.8px; margin: 0 0 9px;
+}
+h1 b { font-weight: 600; color: var(--ok); }
+
+#subhead {
+  margin: 0 0 3.4vh; color: var(--ink-2);
+  font-size: clamp(16px, 1.65vw, 20px);
+  min-height: 1.4em; transition: color .4s;
+}
+#subhead.alarm { color: var(--oom); }
+
+/* ---------- the node ---------- */
+
+#nodebox {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--box);
+  box-shadow: 0 1px 2px rgba(18,26,38,.04), 0 8px 24px rgba(18,26,38,.05);
+  overflow: hidden;
+  transition: border-color .5s, box-shadow .5s;
+}
+/* The node itself only ever reacts to the node's own condition. A tenant being
+   killed by its own limit is not the node being in trouble, and lighting the
+   whole box up for it would overstate what the tool can actually say. */
+#nodebox.pressure {
+  border-color: rgba(192,31,79,.55);
+  box-shadow: 0 0 0 1px rgba(192,31,79,.16);
+}
+
+#nodebox > header {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 13.5px;
+}
+#nodename { color: var(--ink-2); }
+#nodecap { color: var(--ink-3); }
+
+#stage { display: block; width: 100%; height: auto; }
+
+/* ---------- bubbles ---------- */
+
+/* Outer group carries the position, set from script. The inner group carries
+   the idle drift, so the two transforms never fight over the same attribute. */
+.bub { transition: transform .9s cubic-bezier(.4,0,.2,1); }
+
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-7px); }
+}
+.bub .float { animation: drift 7s ease-in-out infinite; }
+
+/* What it asked for. Dashed, hollow, and drawn on top, because when a tenant
+   is using eleven times its request the disc swamps the ring and how little it
+   actually promised is the entire point. */
+.ring {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 1.8;
+  stroke-dasharray: 5 4;
+  transition: r .9s cubic-bezier(.4,0,.2,1), stroke .5s;
+}
+
+/* What it is using. */
+.disc {
+  fill: var(--ok);
+  fill-opacity: .62;
+  transition: r .9s cubic-bezier(.4,0,.2,1), fill .5s;
+}
+.r-aggressor  .disc { fill: var(--aggressor); fill-opacity: .72; }
+.r-oom        .disc { fill: var(--oom);       fill-opacity: .68; }
+.r-throttled  .disc { fill: var(--throttled); fill-opacity: .68; }
+.r-stranded   .disc { fill: var(--idle);      fill-opacity: .6; }
+.r-besteffort .disc { fill: var(--besteffort); fill-opacity: .6; }
+
+.r-aggressor .ring { stroke: var(--ink); stroke-opacity: .85; }
+
+/* A disc that has outgrown its own ring gets an edge, so over-consumption
+   survives a projector and a color-blind viewer. */
+.disc.over { stroke: var(--ink); stroke-width: 2; stroke-opacity: .5; }
+
+/* A tenant that declared nothing has no ring to compare against, so its disc
+   is hatched: the size means consumption, and nothing about a promise. */
+.r-besteffort .disc { fill: url(#hatch); fill-opacity: .9; }
+
+/* Throttling is a lid, not a size. The arc sits on top of the disc. */
+.cap {
+  fill: none;
+  stroke: var(--throttled);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: opacity .4s;
+}
+
+/* The kill. A ring that expands once and fades, so the moment is visible even
+   if you were looking at the other half of the screen. */
+@keyframes ripple {
+  from { r: 6px; opacity: .85; stroke-width: 4; }
+  to   { r: 120px; opacity: 0; stroke-width: .5; }
+}
+.pulse { fill: none; stroke: var(--oom); opacity: 0; }
+.pulse.go { animation: ripple 1.5s ease-out 2; }
+
+/* ---------- labels ---------- */
+
+.name {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 500;
+  fill: var(--ink);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: var(--halo);
+  stroke-width: 4.5;
+}
+.say {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 560;
+  text-anchor: middle;
+  fill: var(--ink-2);
+  paint-order: stroke;
+  stroke: var(--halo);
+  stroke-width: 4.5;
+}
+.r-aggressor  .say { fill: var(--aggressor); }
+.r-oom        .say { fill: var(--oom); }
+.r-throttled  .say { fill: var(--throttled); }
+.r-stranded   .say { fill: var(--idle); }
+.r-besteffort .say { fill: var(--besteffort); }
+
+.nums {
+  font-family: var(--mono);
+  font-size: 13px;
+  text-anchor: middle;
+  fill: var(--ink-3);
+  paint-order: stroke;
+  stroke: var(--halo);
+  stroke-width: 4;
+}
+
+/* ---------- key, feed, footer ---------- */
+
+#key {
+  display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
+  margin: 18px 0 0; font-size: 13.5px; color: var(--ink-2);
+}
+.k { display: flex; align-items: center; gap: 6px; }
+.k.dim { color: var(--ink-3); font-family: var(--mono); font-size: 12.5px; }
+.lk-asked { fill: none; stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.lk-using { fill: var(--ok); fill-opacity: .55; }
+
+#feed {
+  margin: 3.4vh 0 0;
+  font-family: var(--mono); font-size: clamp(13.5px, 1.4vw, 16px);
+  color: var(--ink-2);
+  display: flex; align-items: center; gap: 11px; min-height: 1.5em;
+}
+.fdot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--ok); box-shadow: 0 0 0 4px rgba(21,122,116,.16);
+}
+#feed.hot .fdot { background: var(--oom); box-shadow: 0 0 0 4px rgba(192,31,79,.16); }
+#feed.hot #feedtext { color: var(--ink); }
+
+footer {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 24px;
+  background: rgba(246,248,252,.94);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+  backdrop-filter: blur(6px);
+}
+.grow { flex: 1; }
+
+#source {
+  text-transform: uppercase; letter-spacing: .09em;
+  border: 1px solid var(--line); border-radius: 3px; padding: 2px 7px;
+}
+#source[data-src="replay"], #source[data-src="synthetic"] { color: var(--throttled); }
+
+kbd {
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px;
+  padding: 1px 5px; margin: 0 3px 0 12px; color: var(--ink-2); font-size: 10px;
+}
+#keys kbd:first-child { margin-left: 0; }
+
+#toast {
+  position: fixed; bottom: 54px; left: 50%; transform: translateX(-50%);
+  background: var(--box); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--ink);
+  padding: 11px 18px; font-family: var(--mono); font-size: 13px;
+  box-shadow: 0 12px 34px rgba(18,26,38,.18); max-width: 68ch;
+}
+#toast.err { border-color: var(--aggressor); color: #7d1616; }
+
+[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bub .float { animation: none; }
+  .pulse.go { animation-duration: .01s; }
+}
+
+@media (max-width: 720px) {
+  main { padding: 3vh 14px 104px; }
+  #keys { display: none; }
+  #key { gap: 12px; }
+}

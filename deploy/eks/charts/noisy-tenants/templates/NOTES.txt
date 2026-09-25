@@ -1,0 +1,16 @@
+{{ .Chart.Name }} deployed.
+
+  {{ len .Values.tenants }} tenants, all pinned to the `tenants` Karpenter pool
+  so they share a single node.
+
+Give the workloads ~90s to misbehave (the OOM victim needs one crash cycle),
+then:
+
+    make eks-scan
+
+Watch them land:
+
+    kubectl get pods -A -l app -o wide
+{{- range .Values.tenants }}
+    {{ printf "%-16s %s" (include "noisy.ns" .) .role }}
+{{- end }}

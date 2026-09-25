@@ -1,0 +1,24 @@
+# team-analytics: the over-requester.
+#
+# Requests 1Gi and half a core, uses almost nothing. On a single-tenant cluster
+# this is waste. Here it is capacity the scheduler will not offer to anyone
+# else, on a node where a neighbor is already being OOMKilled for want of it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: batch
+  namespace: team-analytics
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: batch } }
+  template:
+    metadata: { labels: { app: batch } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: noisy-lab-worker }
+      containers:
+        - name: batch
+          image: busybox:1.36
+          command: ["sh", "-c", "sleep 3600"]
+          resources:
+            requests: { memory: 1Gi, cpu: 500m }
+            limits: { memory: 2Gi, cpu: 1000m }

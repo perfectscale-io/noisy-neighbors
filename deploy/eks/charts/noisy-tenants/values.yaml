@@ -1,0 +1,139 @@
+# Placement -----------------------------------------------------------------
+# Every tenant lands on the single Karpenter-provisioned node in the `tenants`
+# pool. Co-tenancy is the subject; spreading these across nodes would defeat
+# the entire exercise.
+placement:
+  nodeSelector:
+    noisy-neighbors.io/pool: tenants
+  tolerations:
+    - key: noisy-neighbors.io/tenant
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+image:
+  repository: public.ecr.aws/docker/library/busybox
+  tag: "1.36"
+  pullPolicy: IfNotPresent
+
+# Security ------------------------------------------------------------------
+# The tenants misbehave on resources, not on privilege. Every namespace
+# enforces the restricted Pod Security Standard and every pod satisfies it:
+# non-root, no privilege escalation, all capabilities dropped, seccomp on.
+# A resource-abuse lab is not an excuse to run privileged containers.
+podSecurityStandard: restricted
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Default-deny ingress in every tenant namespace. Enforced by the VPC CNI
+# network policy engine, which the cluster addon enables.
+networkPolicy:
+  enabled: true
+
+# Tenants -------------------------------------------------------------------
+tenants:
+  # ------------------------------------------------------------------ #
+  - name: payments
+    role: aggressor
+    workload: ingest
+    replicas: 1
+    # Requests 64Mi and declares no limit, then takes ~700Mi and a full core.
+    # The scheduler packed four other tenants around the 64Mi number, so every
+    # one of them was placed on a false premise.
+    script: |
+      dd if=/dev/zero of=/ram/fill bs=1M count=700 2>/dev/null
+      while :; do :; done
+    ramDisk: 1Gi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      # No limits block on purpose: nothing caps this container.
+
+  # ------------------------------------------------------------------ #
+  - name: search
+    role: oom-victim
+    workload: api
+    replicas: 1
+    # Declares 128Mi and genuinely needs 160Mi: it serves for 25 seconds, then
+    # warms a 160Mi cache and holds it. Over its own 128Mi limit it is
+    # OOMKilled on every warm-up, neighbor or no neighbor.
+    #
+    # The need is bounded on purpose. This used to run `tail /dev/zero`, which
+    # grows until killed at ANY limit, so no limit could fix it: each increase
+    # (128Mi -> 192Mi -> 288Mi -> 432Mi) just moved the kill. A demo of a
+    # right-sizer needs a victim that right-sizing can actually rescue. 160Mi
+    # is clearly over the 128Mi limit and under a single 1.5x step (192Mi),
+    # so one correct increase ends the crashloop.
+    #
+    # dd reads 160Mi into a single buffer, then blocks forever writing it into
+    # a pipe that sleep never reads, so the buffer stays resident and charged
+    # to the container. It is anonymous memory rather than a tmpfs volume:
+    # tmpfs pages outlive the container that wrote them, so after the first
+    # kill the replacement would die during init with StartError instead of
+    # the clean OOMKilled crashloop this scenario needs.
+    script: |
+      echo "serving traffic"
+      sleep 25
+      echo "cache warm-up: loading 160Mi and holding it"
+      dd if=/dev/zero bs=160M count=1 2>/dev/null | sleep 2147483647
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits:   { cpu: 200m, memory: 128Mi }
+
+  # ------------------------------------------------------------------ #
+  - name: billing
+    role: throttled
+    workload: worker
+    replicas: 1
+    # 50m of CPU against a workload that wants a whole core. CFS throttles it
+    # in nearly every period. The pod reports Running with zero restarts and
+    # nothing in its events -- this is the case only tier 2 can see.
+    script: |
+      while :; do :; done
+    resources:
+      requests: { cpu: 50m, memory: 32Mi }
+      limits:   { cpu: 50m, memory: 64Mi }
+
+  # ------------------------------------------------------------------ #
+  - name: analytics
+    role: over-requester
+    workload: batch
+    replicas: 2
+    # Requests 1Gi and half a core each, uses nearly nothing. On a shared node
+    # that is not waste, it is capacity the scheduler will not offer to the
+    # neighbor currently being OOMKilled for want of it.
+    script: |
+      sleep 3600
+    resources:
+      requests: { cpu: 500m, memory: 1Gi }
+      limits:   { cpu: 1000m, memory: 2Gi }
+    # A quota too loose to ever bind: the namespace looks governed on paper and
+    # constrains nothing in practice.
+    quota:
+      requests.cpu: "40"
+      requests.memory: 80Gi
+
+  # ------------------------------------------------------------------ #
+  - name: scratch
+    role: besteffort
+    workload: notebook
+    replicas: 1
+    # No requests, no limits. First to be evicted under pressure, and invisible
+    # to any chargeback model built on requests: real consumption, zero
+    # attribution.
+    script: |
+      while :; do sleep 5; done
+    resources: {}

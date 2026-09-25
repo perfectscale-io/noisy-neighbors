@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-payments
+  labels: { lab.noisy-neighbors/tenant: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-search
+  labels: { lab.noisy-neighbors/tenant: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-billing
+  labels: { lab.noisy-neighbors/tenant: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-analytics
+  labels: { lab.noisy-neighbors/tenant: "true" }
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-scratch
+  labels: { lab.noisy-neighbors/tenant: "true" }
+---
+# A quota so loose it cannot bind. This is the "quota theater" case: the
+# namespace looks governed on paper and is not constrained in practice.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: generous
+  namespace: team-analytics
+spec:
+  hard:
+    requests.cpu: "40"
+    requests.memory: 80Gi

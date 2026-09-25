@@ -1,0 +1,13 @@
+bin/
+dist/
+*.out
+*.test
+.DS_Store
+
+# Anything that came off a real cluster: never commit it.
+*.jsonl
+kubeconfig*
+*.kubeconfig
+.env
+.env.*
+deploy/eks/*.rendered.yaml

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who is on this node</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/bubbles.css">
+</head>
+<body>
+
+<main>
+  <h1 id="headline">One node. <b id="tcount">five tenants</b>.</h1>
+  <p id="subhead">Each of them told the scheduler what it needed.</p>
+
+  <!-- The node, with its tenants inside it. Each tenant is a ring whose AREA
+       is what it asked for, and a disc whose AREA is what it is using. A disc
+       that has grown past its own ring is taking more than it declared. -->
+  <section id="nodebox">
+    <header>
+      <span id="nodename"></span>
+      <span id="nodecap"></span>
+    </header>
+    <svg id="stage" viewBox="0 0 1000 420" preserveAspectRatio="xMidYMid meet"
+         role="img" aria-labelledby="stagedesc">
+      <desc id="stagedesc">Tenants on one node, drawn as circles sized by request.</desc>
+      <g id="bubbles"></g>
+    </svg>
+  </section>
+
+  <p id="key">
+    <span class="k"><svg width="34" height="18"><circle cx="17" cy="9" r="7.5" class="lk-asked"/></svg> asked for</span>
+    <span class="k"><svg width="34" height="18"><circle cx="17" cy="9" r="7.5" class="lk-using"/></svg> using</span>
+    <span class="k dim">area, not width</span>
+  </p>
+
+  <p id="feed"><span class="fdot"></span><span id="feedtext">watching</span></p>
+</main>
+
+<footer>
+  <span id="source">connecting</span>
+  <span id="dimname"></span>
+  <span class="grow"></span>
+  <span id="keys"><kbd>B</kbd> aggressor <kbd>R</kbd> reset <kbd>M</kbd>/<kbd>C</kbd> mem/cpu <kbd>L</kbd> bars <kbd>T</kbd> tenant <kbd>D</kbd> detail</span>
+</footer>
+
+<div id="toast" hidden></div>
+
+<script src="/assets/common.js"></script>
+<script src="/assets/bubbles.js"></script>
+</body>
+</html>

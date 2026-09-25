@@ -1,0 +1,33 @@
+# Cluster-level PerfectScale automation.
+#
+# One of these is required per cluster before any namespace or workload config
+# takes effect. Once automation is managed by CRs, the CRs are the whole
+# picture: anything automated from the UI before should be expressed here too.
+#
+# Deliberately no workloadTypes here. A cluster config that enables a workload
+# type enables it for every namespace. Enabling happens per namespace instead
+# (10-platform.yaml, 20-tenants.yaml), so nothing is automated by accident.
+#
+# Docs: https://docs.perfectscale.io/enable-automation/configuring-automation-with-crd
+apiVersion: perfectscale.io/v1
+kind: ClusterAutomationConfig
+metadata:
+  name: cluster-automation-config
+spec:
+  automation:
+    operational:
+      stopAllAutomation: false   # the global kill switch; true stops everything
+      cleanupAllAutomation: false # true stops everything AND reverts every change
+
+      # In-place resize, so right-sizing does not restart pods. This is the
+      # agent's default from 1.0.26; stated so the file does not depend on it.
+      automationStrategy: inPlace
+      podResizePendingStrategy: rollingRestart
+      duringRolloutInProgress: pause
+
+      restrictions:
+        cpuManagement:
+          limit:
+            # Carried over from the UI's cluster setting ("Keep CPU Limit"
+            # cleared). This is what removed billing's CPU limit.
+            keepLimit: false

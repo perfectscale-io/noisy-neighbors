@@ -1,0 +1,206 @@
+# The five lab tenants: full right-sizing, in both directions.
+#
+# Right-sizing has a cost half and a reliability half. Cutting requests that
+# are never used is the cost half. The reliability half is raising what is too
+# low: payments' memory request, search's memory limit. These configs turn
+# both on for the tenant namespaces:
+#
+#   - requests may go up as well as down, for CPU and memory
+#   - memory limits may be raised when a workload is being killed at them,
+#     and lowered when they are far above what it uses
+#   - the minimum-waste threshold drops to $1 a month, because the lab's
+#     workloads are tiny and would otherwise be below it
+#   - automation may act every 5 minutes, so a change is visible within a
+#     demo rather than after it
+#   - memory limits may be raised up to 20 times a day. A workload flagged as
+#     a suspected memory leak gets a small daily budget of increases, so a
+#     real leak is not fed forever; search earned that flag while its test
+#     load was unbounded, and this keeps the lab from stalling on it.
+#
+# automationMode is set twice on purpose: for the namespace, and for the
+# Deployment workload type. A workload is automated only when its type is
+# enabled, and the namespace switch alone turns nothing on.
+#
+# Every tenant uses the same config name, so the before/after toggle can flip
+# both switches on each: make eks-ps-before / make eks-ps-after.
+#
+# Reference: https://docs.perfectscale.io/enable-automation/configuring-automation-with-crd
+apiVersion: perfectscale.io/v1
+kind: NamespaceAutomationConfig
+metadata:
+  name: tenant-automation
+  namespace: team-analytics
+spec:
+  automation:
+    operational:
+      automationMode: Enabled
+      timeConstraints:
+        wasteMaxAutomationFrequency: "5m"          # decreases
+        fixResiliencyMaxAutomationFrequency: "5m"  # increases
+      restrictions:
+        workloadMinWasteUSDPerMonth: 1
+        cpuManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            keepLimit: false
+        memoryManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            increaseEnabled: true
+            decreaseEnabled: true
+            memoryLeakDetection:
+              maxMemoryIncreaseIterations:
+                daily: 20
+                weekly: 100
+    workloadTypes:
+      Deployment:
+        operational:
+          automationMode: Enabled
+---
+apiVersion: perfectscale.io/v1
+kind: NamespaceAutomationConfig
+metadata:
+  name: tenant-automation
+  namespace: team-billing
+spec:
+  automation:
+    operational:
+      automationMode: Enabled
+      timeConstraints:
+        wasteMaxAutomationFrequency: "5m"          # decreases
+        fixResiliencyMaxAutomationFrequency: "5m"  # increases
+      restrictions:
+        workloadMinWasteUSDPerMonth: 1
+        cpuManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            keepLimit: false
+        memoryManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            increaseEnabled: true
+            decreaseEnabled: true
+            memoryLeakDetection:
+              maxMemoryIncreaseIterations:
+                daily: 20
+                weekly: 100
+    workloadTypes:
+      Deployment:
+        operational:
+          automationMode: Enabled
+---
+apiVersion: perfectscale.io/v1
+kind: NamespaceAutomationConfig
+metadata:
+  name: tenant-automation
+  namespace: team-payments
+spec:
+  automation:
+    operational:
+      automationMode: Enabled
+      timeConstraints:
+        wasteMaxAutomationFrequency: "5m"          # decreases
+        fixResiliencyMaxAutomationFrequency: "5m"  # increases
+      restrictions:
+        workloadMinWasteUSDPerMonth: 1
+        cpuManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            keepLimit: false
+        memoryManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            increaseEnabled: true
+            decreaseEnabled: true
+            memoryLeakDetection:
+              maxMemoryIncreaseIterations:
+                daily: 20
+                weekly: 100
+    workloadTypes:
+      Deployment:
+        operational:
+          automationMode: Enabled
+---
+apiVersion: perfectscale.io/v1
+kind: NamespaceAutomationConfig
+metadata:
+  name: tenant-automation
+  namespace: team-scratch
+spec:
+  automation:
+    operational:
+      automationMode: Enabled
+      timeConstraints:
+        wasteMaxAutomationFrequency: "5m"          # decreases
+        fixResiliencyMaxAutomationFrequency: "5m"  # increases
+      restrictions:
+        workloadMinWasteUSDPerMonth: 1
+        cpuManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            keepLimit: false
+        memoryManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            increaseEnabled: true
+            decreaseEnabled: true
+            memoryLeakDetection:
+              maxMemoryIncreaseIterations:
+                daily: 20
+                weekly: 100
+    workloadTypes:
+      Deployment:
+        operational:
+          automationMode: Enabled
+---
+apiVersion: perfectscale.io/v1
+kind: NamespaceAutomationConfig
+metadata:
+  name: tenant-automation
+  namespace: team-search
+spec:
+  automation:
+    operational:
+      automationMode: Enabled
+      timeConstraints:
+        wasteMaxAutomationFrequency: "5m"          # decreases
+        fixResiliencyMaxAutomationFrequency: "5m"  # increases
+      restrictions:
+        workloadMinWasteUSDPerMonth: 1
+        cpuManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            keepLimit: false
+        memoryManagement:
+          request:
+            increaseEnabled: true
+            decreaseEnabled: true
+          limit:
+            increaseEnabled: true
+            decreaseEnabled: true
+            memoryLeakDetection:
+              maxMemoryIncreaseIterations:
+                daily: 20
+                weekly: 100
+    workloadTypes:
+      Deployment:
+        operational:
+          automationMode: Enabled

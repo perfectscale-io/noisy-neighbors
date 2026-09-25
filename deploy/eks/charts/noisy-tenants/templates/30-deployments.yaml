@@ -1,0 +1,68 @@
+{{- range $t := .Values.tenants }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $t.workload }}
+  namespace: {{ include "noisy.ns" $t }}
+  labels:
+    app: {{ $t.workload }}
+    lab.noisy-neighbors/role: {{ $t.role }}
+  annotations:
+    lab.noisy-neighbors/scenario: {{ $t.role | quote }}
+spec:
+  replicas: {{ $t.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $t.workload }}
+  template:
+    metadata:
+      labels:
+        app: {{ $t.workload }}
+        lab.noisy-neighbors/role: {{ $t.role }}
+    spec:
+      nodeSelector:
+{{ toYaml $.Values.placement.nodeSelector | indent 8 }}
+      tolerations:
+{{ toYaml $.Values.placement.tolerations | indent 8 }}
+      securityContext:
+{{ toYaml $.Values.securityContext | indent 8 }}
+      volumes:
+        # Every pod gets a writable /tmp because the root filesystem is
+        # read-only. Small, and it keeps the restricted PSS honest.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+{{- if $t.ramDisk }}
+        # Memory-backed. The kernel charges these pages to the pod's memory
+        # cgroup, which is what makes the aggressor's usage real rather than
+        # simulated.
+        - name: ram
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ $t.ramDisk }}
+{{- end }}
+      containers:
+        - name: {{ $t.workload }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: ["sh", "-c"]
+          args:
+            - |
+{{ $t.script | indent 14 }}
+          securityContext:
+{{ toYaml $.Values.containerSecurityContext | indent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+{{- if $t.ramDisk }}
+            - name: ram
+              mountPath: /ram
+{{- end }}
+{{- if $t.resources }}
+          resources:
+{{ toYaml $t.resources | indent 12 }}
+{{- else }}
+          # Deliberately no resources block at all: BestEffort QoS.
+{{- end }}
+{{- end }}

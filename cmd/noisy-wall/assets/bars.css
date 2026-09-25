@@ -1,0 +1,264 @@
+/* The simple view.
+ *
+ * One node, one row per tenant, one comparison per row: the dashed outline is
+ * what that tenant asked the scheduler for, the solid bar is what it is
+ * actually using. Each row is scaled to its own larger number, because these
+ * tenants span five orders of magnitude and one shared scale flattened all but
+ * the largest of them into an invisible sliver.
+ *
+ * Everything else was cut. There is no legend, because a row that reads "asked
+ * 64Mi, using 701Mi" needs no key. There is no table, because the rows are the
+ * table. There are no per-node CPU and memory panels, because one dimension at
+ * a time is what makes it a story instead of a console. The console still
+ * exists, at /detail, for the part of the demo that needs it.
+ */
+
+:root {
+  --bg: #0c1016;
+  --ink: #eef2f8;
+  --ink-2: #9aa7bd;
+  --ink-3: #64728c;
+  --line: #222c3c;
+
+  --ok: #3fa7a2;
+  --aggressor: #ff5252;
+  --oom: #ff3d6e;
+  --throttled: #eda23c;
+  --idle: #6b7a9e;
+  --besteffort: #9b7ce0;
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 7vh 32px 120px;
+}
+
+h1 {
+  font-size: clamp(26px, 3.4vw, 40px);
+  font-weight: 600;
+  letter-spacing: -0.8px;
+  margin: 0 0 10px;
+}
+h1 b { font-weight: 600; color: var(--ok); }
+
+#subhead {
+  margin: 0 0 6vh;
+  color: var(--ink-2);
+  font-size: clamp(15px, 1.5vw, 18px);
+  min-height: 1.4em;
+  transition: color .4s;
+}
+#subhead.alarm { color: var(--oom); }
+
+/* ---------- the rows ---------- */
+
+#tenants { list-style: none; margin: 0; padding: 0; }
+
+.row {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr) 232px;
+  align-items: center;
+  gap: 22px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.row:first-child { border-top: 1px solid var(--line); }
+
+.who {
+  font-family: var(--mono);
+  font-size: clamp(14px, 1.5vw, 17px);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Both bars start at the track's left edge, so the one
+   that reaches further is the answer, and no axis or gridline is needed. */
+.track {
+  position: relative;
+  height: 40px;
+}
+
+/* What it asked for. Drawn on top of the solid bar, not behind it: when a
+   tenant is using eleven times its request the bar swamps the outline, and the
+   smallness of what it actually declared is the entire point of the row. */
+.asked {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border: 1.5px dashed var(--ink-2);
+  border-radius: 4px;
+  z-index: 2;
+  transition: width .8s cubic-bezier(.4,0,.2,1);
+}
+
+/* What it is using. Drawn shorter than the track so the dashed outline behind
+   it stays visible where it extends past. */
+.using {
+  position: absolute;
+  left: 0; top: 7px; bottom: 7px;
+  border-radius: 3px;
+  background: var(--ok);
+  z-index: 1;
+  transition: width .8s cubic-bezier(.4,0,.2,1), background .5s;
+}
+.row.r-aggressor  .using { background: var(--aggressor); }
+.row.r-oom        .using { background: var(--oom); }
+.row.r-throttled  .using { background: var(--throttled); }
+.row.r-stranded   .using { background: var(--idle); }
+/* A tenant that declared nothing has no promise to be measured against, so its
+   row has no scale either. Hatching says "this length means nothing" rather
+   than letting a full-width bar imply it is the biggest thing on the node. */
+.row.r-besteffort .using {
+  background: repeating-linear-gradient(
+    -45deg, var(--besteffort) 0 6px, rgba(155,124,224,.3) 6px 12px);
+}
+
+/* A bar that has run past what it asked for gets a hard edge and a glow, so
+   over-consumption is visible from the back of a room. */
+.using.over {
+  box-shadow: 0 0 18px 2px rgba(255,82,82,.55);
+  border-right: 3px solid #fff;
+}
+
+.state {
+  text-align: right;
+  font-size: clamp(12px, 1.25vw, 14.5px);
+  line-height: 1.35;
+}
+.state .verdict { display: block; font-weight: 560; }
+.state .nums {
+  display: block;
+  font-family: var(--mono);
+  font-size: .86em;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
+.row.r-aggressor  .verdict { color: var(--aggressor); }
+.row.r-oom        .verdict { color: var(--oom); }
+.row.r-throttled  .verdict { color: var(--throttled); }
+.row.r-stranded   .verdict { color: var(--idle); }
+.row.r-besteffort .verdict { color: var(--besteffort); }
+.row.r-ok         .verdict { color: var(--ink-2); }
+
+/* A tenant arriving, and a tenant being killed. Two animations, both brief:
+   the row is the story, the motion only points at it. */
+@keyframes rowin {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+.row.arrived { animation: rowin .5s cubic-bezier(.2,1,.3,1); }
+
+@keyframes kill {
+  0%, 100% { background: transparent; }
+  20%      { background: rgba(255,61,110,.22); }
+}
+.row.killed { animation: kill 1.2s ease-out 2; }
+
+/* ---------- scale + feed ---------- */
+
+#scalebar {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  text-align: right;
+}
+
+#feed {
+  margin: 5vh 0 0;
+  font-family: var(--mono);
+  font-size: clamp(12.5px, 1.3vw, 15px);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 1.5em;
+}
+.fdot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok); flex: none;
+  box-shadow: 0 0 0 4px rgba(63,167,162,.15);
+}
+#feed.hot .fdot { background: var(--oom); box-shadow: 0 0 0 4px rgba(255,61,110,.18); }
+#feed.hot #feedtext { color: var(--ink); }
+
+/* ---------- footer ---------- */
+
+footer {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 24px;
+  background: rgba(12,16,22,.93);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  backdrop-filter: blur(6px);
+}
+.grow { flex: 1; }
+
+/* The frame's provenance is never hidden: a demo that silently falls back to a
+   recording is a demo that lies. */
+#source {
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 7px;
+}
+#source[data-src="replay"], #source[data-src="synthetic"] { color: var(--throttled); }
+
+kbd {
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin: 0 3px 0 12px;
+  color: var(--ink-2);
+  font-size: 10px;
+}
+#keys kbd:first-child { margin-left: 0; }
+
+#toast {
+  position: fixed;
+  bottom: 54px; left: 50%; transform: translateX(-50%);
+  background: #161c28;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 11px 18px;
+  font-family: var(--mono);
+  font-size: 13px;
+  box-shadow: 0 12px 34px rgba(0,0,0,.55);
+  max-width: 68ch;
+}
+#toast.err { border-color: var(--aggressor); color: #ffdada; }
+
+[hidden] { display: none !important; }
+
+@media (max-width: 720px) {
+  main { padding: 4vh 16px 110px; }
+  .row { grid-template-columns: minmax(0,1fr) 130px; gap: 12px; }
+  /* The name moves above the bar rather than shrinking into nothing. */
+  .who { grid-column: 1 / -1; }
+  .track { height: 32px; }
+  #keys { display: none; }
+}

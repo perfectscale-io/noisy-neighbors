@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who is on this node</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/bars.css">
+</head>
+<body>
+
+<main>
+  <h1 id="headline">One node. <b id="tcount">five tenants</b>.</h1>
+  <p id="subhead">Each of them told the scheduler what it needed.</p>
+
+  <!-- One row per tenant. The outline is what it asked for, the solid bar is
+       what it is using, both on the same scale across every row. That is the
+       whole picture: five promises, five realities, side by side. -->
+  <ol id="tenants"></ol>
+
+  <div id="scalebar">
+    <span id="scalenote"></span>
+  </div>
+
+  <p id="feed"><span class="fdot"></span><span id="feedtext">watching</span></p>
+</main>
+
+<footer>
+  <span id="source">connecting</span>
+  <span id="node"></span>
+  <span class="grow"></span>
+  <span id="keys"><kbd>B</kbd> aggressor <kbd>R</kbd> reset <kbd>T</kbd> tenant view <kbd>O</kbd> bubbles <kbd>D</kbd> detail</span>
+</footer>
+
+<div id="toast" hidden></div>
+
+<script src="/assets/common.js"></script>
+<script src="/assets/bars.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# team-scratch: BestEffort on a shared node.
+#
+# No requests, no limits. First in line for eviction when the node runs short,
+# and invisible to any allocation model built on requests: it consumes real
+# resources and contributes zero to every chargeback number.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook
+  namespace: team-scratch
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notebook } }
+  template:
+    metadata: { labels: { app: notebook } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: noisy-lab-worker }
+      containers:
+        - name: notebook
+          image: busybox:1.36
+          command: ["sh", "-c", "while :; do sleep 5; done"]
+          # Deliberately no resources block at all.

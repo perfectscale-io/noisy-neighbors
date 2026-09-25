@@ -1,0 +1,163 @@
+# eksctl ClusterConfig for the noisy-neighbors lab.
+#
+# Rendered by scripts/lib.sh (envsubst) so every value comes from env.sh. Run
+# `make eks-config` to print the rendered file without applying anything.
+#
+# Security posture, and why each piece is here:
+#
+#   * Workers have no public IPs and sit only in private subnets, egressing
+#     through a NAT gateway. Nothing in the data plane is reachable from the
+#     internet.
+#   * The API server has private access on, and its public endpoint is locked
+#     to ${ADMIN_CIDR} -- a /32 detected at spin-up. Everyone else gets a TCP
+#     timeout, not an auth error.
+#   * Authentication is EKS access entries (API mode). No aws-auth ConfigMap,
+#     so cluster access is IAM-auditable and revocable without editing a
+#     ConfigMap in kube-system.
+#   * Secrets are envelope-encrypted with a customer-managed KMS key
+#     (CIS EKS 2.1.1 / 3.1.x). The key is created by scripts/up.sh.
+#   * All five control plane log streams go to CloudWatch, retained
+#     ${LOG_RETENTION_DAYS} days.
+#   * IMDSv1 is off and pod-level IMDS access is blocked outright, so a
+#     compromised container cannot mint node-role credentials.
+#   * Node root volumes are gp3 and encrypted.
+#   * No SSH key, no public ingress to nodes. Use SSM if you need a shell.
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: ${CLUSTER_NAME}
+  region: ${AWS_DEFAULT_REGION}
+  version: "${K8S_VERSION}"
+  tags:
+    # Karpenter discovers subnets and security groups by this tag. up.sh
+    # narrows it to private subnets and the cluster SG only -- eksctl applies
+    # cluster tags broadly, which would otherwise let Karpenter launch nodes
+    # into public subnets.
+    karpenter.sh/discovery: ${CLUSTER_NAME}
+    project: noisy-neighbors
+    environment: lab
+
+# --- authentication -------------------------------------------------------
+accessConfig:
+  authenticationMode: API
+  bootstrapClusterCreatorAdminPermissions: true
+  accessEntries:
+    # Karpenter-launched nodes authenticate with this role. EC2_LINUX is the
+    # access-entry equivalent of the old system:bootstrappers/system:nodes
+    # aws-auth mapping, and it is scoped to node bootstrap only.
+    - principalARN: arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:role/KarpenterNodeRole-${CLUSTER_NAME}
+      type: EC2_LINUX
+
+# --- encryption at rest ---------------------------------------------------
+secretsEncryption:
+  keyARN: ${KMS_KEY_ARN}
+
+# --- control plane audit --------------------------------------------------
+cloudWatch:
+  clusterLogging:
+    enableTypes: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+    logRetentionInDays: ${LOG_RETENTION_DAYS}
+
+# --- network --------------------------------------------------------------
+vpc:
+  cidr: ${VPC_CIDR}
+  nat:
+    gateway: ${NAT_MODE}
+  clusterEndpoints:
+    # Private access on: in-cluster and in-VPC traffic to the API server never
+    # leaves the VPC. Public access stays on but is CIDR-locked, so kubectl
+    # works from this laptop and from nowhere else.
+    publicAccess: true
+    privateAccess: true
+  publicAccessCIDRs:
+    - ${ADMIN_CIDR}
+
+kubernetesNetworkConfig:
+  ipFamily: IPv4
+
+# Pinned, not defaulted. eksctl has announced that Auto Mode will become the
+# default in a future release, at which point managed node groups and managed
+# networking addons stop being created. This lab provisions with Karpenter on
+# purpose, so the choice is stated rather than inherited -- otherwise a routine
+# `brew upgrade eksctl` silently builds a different cluster from the same file.
+autoModeConfig:
+  enabled: false
+
+# --- IAM ------------------------------------------------------------------
+iam:
+  withOIDC: true
+  podIdentityAssociations:
+    # Karpenter uses EKS Pod Identity rather than IRSA: the trust policy is
+    # scoped to this cluster plus this exact namespace/serviceaccount pair,
+    # and there is no OIDC audience to get wrong.
+    - namespace: ${KARPENTER_NAMESPACE}
+      serviceAccountName: karpenter
+      roleName: ${CLUSTER_NAME}-karpenter
+      permissionPolicyARNs:
+        - arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:policy/KarpenterControllerNodeLifecyclePolicy-${CLUSTER_NAME}
+        - arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:policy/KarpenterControllerIAMIntegrationPolicy-${CLUSTER_NAME}
+        - arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:policy/KarpenterControllerEKSIntegrationPolicy-${CLUSTER_NAME}
+        - arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:policy/KarpenterControllerInterruptionPolicy-${CLUSTER_NAME}
+        - arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:policy/KarpenterControllerResourceDiscoveryPolicy-${CLUSTER_NAME}
+        - arn:${AWS_PARTITION}:iam::${AWS_ACCOUNT_ID}:policy/KarpenterControllerZonalShiftPolicy-${CLUSTER_NAME}
+
+# --- addons ---------------------------------------------------------------
+addonsConfig:
+  autoApplyPodIdentityAssociations: true
+  # Every addon on this cluster is declared below, and nothing else.
+  #
+  # Left at the default, eksctl also installs a managed metrics-server addon.
+  # That collides head-on with the Helm release: EKS stamps its resources
+  # `app.kubernetes.io/managed-by: EKS`, and Helm refuses to adopt them
+  # ("invalid ownership metadata"). Two owners for one component is the bug,
+  # not the error message. metrics-server is installed with Helm here, so the
+  # managed one must not exist.
+  disableDefaultAddons: true
+
+addons:
+  - name: vpc-cni
+    configurationValues: |-
+      {
+        "enableNetworkPolicy": "true",
+        "env": {
+          "ENABLE_PREFIX_DELEGATION": "true",
+          "AWS_VPC_K8S_CNI_EXTERNALSNAT": "false"
+        }
+      }
+  - name: coredns
+  - name: kube-proxy
+  # Required for the Karpenter pod identity association above.
+  - name: eks-pod-identity-agent
+  - name: aws-ebs-csi-driver
+
+# --- data plane -----------------------------------------------------------
+managedNodeGroups:
+  # Carries kube-system, Karpenter and metrics-server only. Karpenter cannot
+  # manage the node its own controller runs on, so this group is the bootstrap
+  # floor; everything else is provisioned by Karpenter.
+  - name: system
+    amiFamily: AmazonLinux2023
+    instanceType: ${SYSTEM_INSTANCE_TYPE}
+    minSize: ${SYSTEM_MIN_SIZE}
+    maxSize: ${SYSTEM_MAX_SIZE}
+    desiredCapacity: ${SYSTEM_DESIRED_SIZE}
+
+    privateNetworking: true       # private subnets, no public IP
+    volumeType: gp3
+    volumeSize: 40
+    volumeEncrypted: true
+
+    disableIMDSv1: true           # token-required IMDS (CIS)
+    disablePodIMDS: true          # pods cannot reach 169.254.169.254 at all
+
+    labels:
+      noisy-neighbors.io/pool: system
+    tags:
+      project: noisy-neighbors
+    updateConfig:
+      maxUnavailablePercentage: 50
+
+zonalShiftConfig:
+  enabled: true

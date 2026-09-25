@@ -1,0 +1,141 @@
+# Karpenter NodePools and EC2NodeClasses.
+#
+# Two pools. `general` is an ordinary autoscaling pool. `tenants` exists to
+# manufacture the exact condition noisy-neighbors is built to diagnose: five
+# unrelated namespaces sharing one node.
+---
+# Hardened node class shared by both pools.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  role: KarpenterNodeRole-${CLUSTER_NAME}
+  amiSelectorTerms:
+    - alias: al2023@latest
+
+  # Both terms must match, so only private subnets are eligible. eksctl tags
+  # every subnet it creates with the cluster tags, including public ones;
+  # kubernetes.io/role/internal-elb is set on private subnets only. up.sh also
+  # strips the discovery tag from public subnets, so this is the second of two
+  # independent guards against a worker landing on a public subnet.
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: ${CLUSTER_NAME}
+        kubernetes.io/role/internal-elb: "1"
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: ${CLUSTER_NAME}
+
+  # Same posture as the managed node group: encrypted gp3 root volume,
+  # IMDSv2 required, and a hop limit of 1 so the token request dies before it
+  # reaches a pod's network namespace.
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeType: gp3
+        volumeSize: 40Gi
+        encrypted: true
+        deleteOnTermination: true
+
+  metadataOptions:
+    httpEndpoint: enabled
+    httpTokens: required
+    httpPutResponseHopLimit: 1
+    httpProtocolIPv6: disabled
+
+  tags:
+    project: noisy-neighbors
+    environment: lab
+---
+# General-purpose pool. Nothing in this lab targets it by default; it is here
+# so the cluster behaves like a real one when you add your own workloads.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: general
+spec:
+  template:
+    metadata:
+      labels:
+        noisy-neighbors.io/pool: general
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      expireAfter: 168h        # force node rotation weekly: patched AMIs, short-lived creds
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot", "on-demand"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["4"]
+  limits:
+    cpu: "32"
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m
+---
+# The tenant pool: exactly one node, and every tenant on it.
+#
+# Three constraints combine to guarantee that:
+#   1. a single permitted instance type (${TENANT_INSTANCE_TYPE});
+#   2. a pool CPU limit of ${TENANT_POOL_CPU_LIMIT}, which is that instance's
+#      full vCPU count -- so a second node would exceed the limit and Karpenter
+#      will not launch one;
+#   3. a NoSchedule taint that only the tenant chart tolerates, so nothing else
+#      can consume the node's headroom and skew the numbers.
+#
+# On-demand only: a spot reclaim mid-scan would look like an eviction the tool
+# had found, which is a misleading demo.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: tenants
+spec:
+  template:
+    metadata:
+      labels:
+        noisy-neighbors.io/pool: tenants
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      expireAfter: Never       # the lab node must survive the sampling window
+      taints:
+        - key: noisy-neighbors.io/tenant
+          value: "true"
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values: ["${TENANT_INSTANCE_TYPE}"]
+  limits:
+    cpu: "${TENANT_POOL_CPU_LIMIT}"
+  disruption:
+    # Never consolidate: the whole point is a deliberately badly-packed node.
+    # Consolidation would quietly repair the condition under test.
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: Never

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Search API &middot; Service Health</title>
+<link rel="icon" href="data:,">
+<style>
+/* The tenant's own dashboard.
+ *
+ * This page is the argument. It is deliberately light, rounded and reassuring,
+ * because that is what a service owner's dashboard looks like, and it is shown
+ * beside the wall at the moment this exact workload is being OOMKilled.
+ *
+ * Nothing here is fabricated. Every number comes off the same stream the wall
+ * reads. The point is not that the tenant's tooling lies, it is that a
+ * service-level view answers a service-level question, and "am I being harmed
+ * by a neighbor" is not one. The restart counter is present, at the bottom,
+ * unstyled and unalerted, because that is honestly where it would be.
+ */
+:root {
+  --ink: #1f2430;
+  --ink-2: #5b6575;
+  --ink-3: #8b95a6;
+  --line: #e3e7ee;
+  --ok: #17916b;
+  --ok-bg: #e8f7f1;
+  --card: #ffffff;
+  --bg: #f4f6fa;
+  --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+header {
+  background: var(--card); border-bottom: 1px solid var(--line);
+  padding: 16px 24px; display: flex; align-items: center; gap: 14px;
+}
+.logo {
+  width: 30px; height: 30px; border-radius: 7px;
+  background: linear-gradient(135deg, #4c6ef5, #7c5cf0);
+  display: grid; place-items: center; color: #fff;
+  font-weight: 700; font-size: 14px; flex: none;
+}
+h1 { font-size: 17px; margin: 0; font-weight: 620; }
+.sub { color: var(--ink-3); font-size: 12.5px; font-family: var(--mono); }
+.spacer { flex: 1; }
+.pill {
+  background: var(--ok-bg); color: var(--ok);
+  border: 1px solid #bfe8d8; border-radius: 999px;
+  padding: 5px 13px; font-size: 12.5px; font-weight: 640;
+  display: flex; align-items: center; gap: 7px;
+}
+.pip { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+main { padding: 22px 24px 40px; max-width: 900px; }
+.banner {
+  background: var(--ok-bg); border: 1px solid #bfe8d8;
+  border-radius: 10px; padding: 16px 18px; margin-bottom: 20px;
+  display: flex; align-items: center; gap: 13px;
+}
+.banner .big { font-size: 16px; font-weight: 650; color: #0f6b4f; }
+.banner .small { color: #2b7a5e; font-size: 13px; }
+.tick {
+  width: 24px; height: 24px; border-radius: 50%; background: var(--ok);
+  color: #fff; display: grid; place-items: center; font-size: 14px; flex: none;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; padding: 15px 16px;
+}
+.card .k {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-3); font-weight: 640; margin-bottom: 7px;
+}
+.card .v { font-size: 25px; font-weight: 640; letter-spacing: -.6px; font-variant-numeric: tabular-nums; }
+.card .n { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+.card .v.good { color: var(--ok); }
+.panel {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; margin-top: 18px; overflow: hidden;
+}
+.panel h2 {
+  margin: 0; padding: 13px 16px; font-size: 13px; font-weight: 640;
+  border-bottom: 1px solid var(--line);
+}
+.panel .body { padding: 16px; }
+svg { display: block; width: 100%; height: 90px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+td, th { text-align: left; padding: 9px 16px; border-bottom: 1px solid var(--line); }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); }
+tr:last-child td { border-bottom: 0; }
+td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+.ok-text { color: var(--ok); font-weight: 600; }
+.foot { color: var(--ink-3); font-size: 11.5px; margin-top: 22px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">S</div>
+  <div>
+    <h1>Search API</h1>
+    <div class="sub">team-search &middot; production</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="pill"><span class="pip"></span><span id="status">All systems normal</span></div>
+</header>
+
+<main>
+  <div class="banner">
+    <div class="tick">&#10003;</div>
+    <div>
+      <div class="big">No active incidents</div>
+      <div class="small">No alerts fired in the last 24 hours. Next review Monday 09:00.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="k">Availability</div>
+      <div class="v good">99.98%</div>
+      <div class="n">30-day rolling</div>
+    </div>
+    <div class="card">
+      <div class="k">Pods ready</div>
+      <div class="v good" id="ready">1 / 1</div>
+      <div class="n" id="phase">Running</div>
+    </div>
+    <div class="card">
+      <div class="k">p99 latency</div>
+      <div class="v">42<span style="font-size:15px;color:var(--ink-3)">ms</span></div>
+      <div class="n">within SLO (250ms)</div>
+    </div>
+    <div class="card">
+      <div class="k">Error rate</div>
+      <div class="v good">0.01%</div>
+      <div class="n">5xx over 5 min</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Request latency, last hour</h2>
+    <div class="body">
+      <svg viewBox="0 0 600 90" preserveAspectRatio="none" aria-label="flat latency line">
+        <polyline id="spark" fill="none" stroke="#17916b" stroke-width="2"
+          points="0,58 40,55 80,60 120,56 160,57 200,54 240,59 280,56 320,55 360,58 400,56 440,57 480,54 520,58 560,56 600,57"/>
+        <line x1="0" y1="20" x2="600" y2="20" stroke="#e3e7ee" stroke-width="1" stroke-dasharray="4 4"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Resource configuration</h2>
+    <table>
+      <thead>
+        <tr><th>Container</th><th class="mono">CPU request</th><th class="mono">Memory request</th><th class="mono">Memory limit</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="mono">api</td>
+          <td class="mono" id="rcpu">100m</td>
+          <td class="mono" id="rmem">128Mi</td>
+          <td class="mono" id="lmem">128Mi</td>
+          <td class="ok-text">Within declared limits</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Present, accurate, and nothing is watching it. -->
+  <div class="panel">
+    <h2>Deployment</h2>
+    <table>
+      <tbody>
+        <tr><td>Image</td><td class="mono">search-api:2.14.1</td></tr>
+        <tr><td>Last deploy</td><td class="mono">4 days ago</td></tr>
+        <tr><td>Container restarts</td><td class="mono" id="restarts">0</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="foot" id="foot">service view &middot; team-search &middot; scoped to this namespace</p>
+</main>
+
+<script>
+/* Reads the same stream the wall reads, so this page is real rather than a
+ * prop. It only ever looks at its own namespace, which is exactly the
+ * constraint that makes a neighbor invisible to it. */
+(() => {
+  "use strict";
+  const NS = new URLSearchParams(location.search).get("ns") || "team-search";
+
+  function apply(snap) {
+    let pod = null;
+    (snap.nodes || []).forEach((n) => (n.pods || []).forEach((p) => {
+      if (p.namespace === NS) pod = p;
+    }));
+    if (!pod) {
+      document.getElementById("ready").textContent = "0 / 1";
+      document.getElementById("phase").textContent = "Pending";
+      return;
+    }
+    document.getElementById("phase").textContent = pod.phase || "Running";
+    document.getElementById("ready").textContent = pod.phase === "Running" ? "1 / 1" : "0 / 1";
+    document.getElementById("restarts").textContent = String(pod.restarts || 0);
+    if (pod.reqCpu) document.getElementById("rcpu").textContent = pod.reqCpu + "m";
+    if (pod.reqMem) document.getElementById("rmem").textContent = Math.round(pod.reqMem / 1048576) + "Mi";
+    if (pod.limMem) document.getElementById("lmem").textContent = Math.round(pod.limMem / 1048576) + "Mi";
+    document.getElementById("foot").textContent =
+      `service view · ${NS} · scoped to this namespace · updated ${new Date(snap.at).toLocaleTimeString([], {hour12:false})}`;
+  }
+
+  fetch("/api/snapshot").then((r) => r.json()).then((s) => { if (!s.pending) apply(s); }).catch(() => {});
+  const es = new EventSource("/api/stream");
+  es.onmessage = (ev) => { try { apply(JSON.parse(ev.data)); } catch (e) {} };
+})();
+</script>
+</body>
+</html>

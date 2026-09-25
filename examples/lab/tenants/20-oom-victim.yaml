@@ -1,0 +1,45 @@
+# team-search: the OOMKill victim.
+#
+# Declares 128Mi and genuinely needs 160Mi: it serves for 25 seconds, then
+# warms a 160Mi cache and holds it, and is OOMKilled against its own 128Mi
+# limit on every warm-up. It dies of its own limit, neighbor or no neighbor;
+# what the lab shows is that it shares a node with one, not that the neighbor
+# killed it. The tenant sees a crashlooping pod; nothing in their own dashboard
+# explains it.
+#
+# The need is bounded on purpose. An earlier version ran `tail /dev/zero`,
+# which grows until killed at ANY limit, so no right-sizing could ever rescue
+# it. 160Mi is clearly over the limit and fixable by one sensible increase.
+#
+# The memory is anonymous: dd reads 160Mi into a single buffer, then blocks
+# forever writing it into a pipe that sleep never reads, so the buffer stays
+# resident. That matters: a memory-backed emptyDir outlives the container that
+# filled it, so after the first OOMKill the pages are still charged to the pod
+# and the replacement container is killed during init with StartError instead
+# of OOMKilled. Anonymous memory is freed when the process dies, which gives
+# the clean crashloop this scenario is for.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: team-search
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: api } }
+  template:
+    metadata: { labels: { app: api } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: noisy-lab-worker }
+      containers:
+        - name: api
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "serving traffic"
+              sleep 25
+              echo "cache warm-up: loading 160Mi and holding it"
+              dd if=/dev/zero bs=160M count=1 2>/dev/null | sleep 2147483647
+          resources:
+            requests: { memory: 128Mi, cpu: 100m }
+            limits: { memory: 128Mi, cpu: 200m }

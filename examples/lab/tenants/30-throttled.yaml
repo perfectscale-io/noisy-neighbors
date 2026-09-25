@@ -1,0 +1,30 @@
+# team-billing: the throttled tenant.
+#
+# A 50m CPU limit against a workload that wants a whole core. CFS throttles it
+# in the great majority of periods. The team files a latency ticket against the
+# platform; the platform is fine.
+#
+# This is the case that only tier 2 can see. Without the kubelet's cadvisor
+# counters, the pod looks healthy: running, no restarts, nothing in its events.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: team-billing
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: worker } }
+  template:
+    metadata: { labels: { app: worker } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: noisy-lab-worker }
+      containers:
+        - name: worker
+          image: busybox:1.36
+          command: ["sh", "-c", "while :; do :; done"]
+          resources:
+            # Kubernetes requires request <= limit, so the request matches the
+            # limit here. The point stands: the workload wants a full core and
+            # is allowed 50m of one.
+            requests: { memory: 32Mi, cpu: 50m }
+            limits: { memory: 64Mi, cpu: 50m }

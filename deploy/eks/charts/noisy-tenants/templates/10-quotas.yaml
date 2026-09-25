@@ -1,0 +1,13 @@
+{{- range .Values.tenants }}
+{{- if .quota }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: generous
+  namespace: {{ include "noisy.ns" . }}
+spec:
+  hard:
+{{ toYaml .quota | indent 4 }}
+{{- end }}
+{{- end }}

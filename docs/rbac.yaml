@@ -1,0 +1,35 @@
+# Minimal RBAC for kubectl noisy-neighbors.
+#
+# Two roles, because tier 2 is a genuinely different ask. Grant the first to
+# anyone; the second gives read access to every kubelet's metrics endpoints via
+# the apiserver proxy, which many platform teams will want to think about.
+#
+#   kubectl apply -f docs/rbac.yaml
+#   kubectl create clusterrolebinding nn --clusterrole=noisy-neighbors --user=<you>
+---
+# Tiers 0 and 1. Read-only, no proxying, safe to hand out.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: noisy-neighbors
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, events, resourcequotas, limitranges, namespaces]
+    verbs: [get, list]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: [nodes, pods]
+    verbs: [get, list]
+---
+# Tier 2. The nodes/proxy subresource reaches every kubelet's HTTP endpoints
+# through the apiserver. This tool only ever issues GETs against
+# /metrics/resource, /metrics/cadvisor and /stats/summary, but the permission
+# itself is broader than that. Run with --no-kubelet if you would rather not
+# grant it; the report degrades and says so.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: noisy-neighbors-kubelet
+rules:
+  - apiGroups: [""]
+    resources: [nodes/proxy]
+    verbs: [get]

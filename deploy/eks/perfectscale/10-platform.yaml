@@ -1,0 +1,56 @@
+# Everything outside the lab tenants: kube-system and the PerfectScale agent
+# itself, on the default policy. No increases are enabled here, so platform
+# workloads are only ever trimmed, never grown.
+#
+# Optional. Delete this file if you only want the tenants automated.
+#
+# automationMode has to be set per workload type, not just for the namespace:
+# a workload is automated only when its type is enabled.
+apiVersion: perfectscale.io/v1
+kind: NamespaceAutomationConfig
+metadata:
+  name: preserve-ui-automation
+  namespace: kube-system
+spec:
+  automation:
+    operational:
+      automationMode: Enabled
+    workloadTypes:
+      Deployment:
+        operational:
+          automationMode: Enabled
+      DaemonSet:
+        operational:
+          automationMode: Enabled
+---
+apiVersion: perfectscale.io/v1
+kind: NamespaceAutomationConfig
+metadata:
+  name: preserve-ui-automation
+  namespace: perfectscale
+spec:
+  automation:
+    operational:
+      automationMode: Enabled
+    workloadTypes:
+      Deployment:
+        operational:
+          automationMode: Enabled
+      DaemonSet:
+        operational:
+          automationMode: Enabled
+---
+# The EKS EBS CSI add-on ships a Windows node DaemonSet. The lab has no Windows
+# nodes, so it runs no pods; excluded so there is nothing to recommend on.
+apiVersion: perfectscale.io/v1
+kind: WorkloadAutomationConfig
+metadata:
+  name: exclude-ebs-csi-node-windows
+  namespace: kube-system
+spec:
+  targetRef:
+    kind: DaemonSet
+    name: ebs-csi-node-windows
+  automation:
+    operational:
+      automationMode: Disabled

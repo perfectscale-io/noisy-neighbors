@@ -1,0 +1,492 @@
+/* The wall.
+ *
+ * Designed for a projector and a screen share, which sets most of the choices
+ * here: a dark ground so a lit room does not wash it out, type that survives
+ * being scaled down by a conferencing tool, and color used only to carry
+ * meaning. Every role also has a non-color cue (a border style, a hatch, a
+ * pulse), because roughly one man in twelve cannot separate the red from the
+ * green and a demo that depends on that has no fallback.
+ */
+
+:root {
+  --bg: #0b0e14;
+  --bg-2: #121722;
+  --panel: #161c28;
+  --line: #243044;
+  --line-2: #2f3d55;
+  --ink: #e6ecf6;
+  --ink-2: #93a1bb;
+  --ink-3: #5c6b85;
+
+  --ok: #3fa7a2;
+  --aggressor: #ff5c5c;
+  --stranded: #6f7ea6;
+  --throttled: #e8a33d;
+  --oom: #ff3d6e;
+  --besteffort: #8b6fd6;
+
+  --radius: 5px;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- header ---------- */
+
+#top {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+
+h1 {
+  font-size: 17px;
+  font-weight: 650;
+  margin: 0;
+  letter-spacing: -0.2px;
+  font-family: var(--mono);
+}
+
+.dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(63,167,162,.18);
+}
+.dot.stale { background: var(--throttled); box-shadow: 0 0 0 3px rgba(232,163,61,.18); }
+.dot.dead  { background: var(--aggressor); box-shadow: 0 0 0 3px rgba(255,92,92,.18); }
+
+.src {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--ink-3);
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+/* A demo that silently falls back to a recording is a demo that lies, so the
+   source of the frames is always on screen. */
+.src[data-src="replay"], .src[data-src="synthetic"] {
+  color: var(--throttled);
+  border-color: rgba(232,163,61,.5);
+}
+
+.tiers { display: flex; gap: 14px; flex: 1; flex-wrap: wrap; }
+
+.tier {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  display: flex; align-items: center; gap: 6px;
+}
+.tier b { color: var(--ink); font-weight: 500; }
+.tier .mark { font-size: 12px; }
+.tier.on  .mark { color: var(--ok); }
+.tier.off .mark { color: var(--ink-3); }
+.tier.off { color: var(--ink-3); }
+
+.clock {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  text-align: right;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+/* ---------- legend ---------- */
+
+#legend {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  padding: 9px 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.lg { display: flex; align-items: center; gap: 7px; }
+.lg b { color: var(--ink); font-weight: 600; }
+
+.sw { width: 15px; height: 15px; border-radius: 3px; display: inline-block; flex: none; }
+.sw.size { border: 1.5px solid var(--ink-2); background: transparent; }
+.sw.fill { background: var(--ink-2); opacity: .55; }
+.sw.r-aggressor  { background: var(--aggressor); }
+.sw.r-stranded   { border: 1.5px dashed var(--stranded); background: transparent; }
+.sw.r-throttled  { background: var(--throttled); }
+.sw.r-oom        { background: var(--oom); }
+.sw.r-besteffort { border: 1.5px dotted var(--besteffort); background: transparent; }
+
+/* Stage 1 and 2 hide what has not been revealed yet, so the reveal in Act 1
+   lands instead of everything arriving at once. */
+body[data-stage="1"] #legend .lg:nth-child(1),
+body[data-stage="1"] #legend .lg:nth-child(2) { opacity: .25; }
+body[data-stage="2"] #legend .lg:nth-child(2) { opacity: .25; }
+
+/* ---------- layout ---------- */
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  padding: 16px 20px 0;
+  align-items: start;
+}
+
+#nodes { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* ---------- node box ---------- */
+
+.node {
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.node.sev-WARNING  { border-color: rgba(232,163,61,.55); }
+.node.sev-CRITICAL { border-color: rgba(255,61,110,.6); box-shadow: 0 0 0 1px rgba(255,61,110,.16); }
+
+.node > header {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(255,255,255,.022), transparent);
+}
+.node h3 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+.node .meta { font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
+.sev {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .09em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--line-2);
+  color: var(--ink-2);
+}
+.sev.sev-WARNING  { color: var(--throttled); border-color: rgba(232,163,61,.5); }
+.sev.sev-CRITICAL { color: var(--oom); border-color: rgba(255,61,110,.55); background: rgba(255,61,110,.08); }
+
+/* The box itself. Height is fixed; tile widths are shares of allocatable, so
+   the tiles and the node are drawn to the same scale and "does it fit" is a
+   question the picture answers. */
+.dims { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; }
+
+.dim-label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 16px;
+  font-family: var(--mono); font-size: 11px; color: var(--ink-3);
+  margin-bottom: 4px;
+}
+/* When the axis is zoomed in on the workload, say so on the axis itself. */
+.dim-label .zoom {
+  font-style: normal; color: var(--throttled);
+  border: 1px solid rgba(232,163,61,.35); border-radius: 3px;
+  padding: 0 4px; margin-left: 6px; font-size: 10px;
+}
+.dim-label .nums { display: flex; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.dim-label .nums span { color: var(--ink-2); }
+.dim-label .nums b { color: var(--ink); font-weight: 500; }
+.dim-label .over b { color: var(--aggressor); }
+
+.box {
+  position: relative;
+  height: 58px;
+  background: repeating-linear-gradient(
+    90deg, rgba(255,255,255,.025) 0 1px, transparent 1px 40px);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: stretch;
+  /* Tiles are laid out left to right in the order the pods came back; the sum
+     of their widths is the sum of requests as a share of allocatable. Anything
+     past 100% is drawn clipped, which is itself the finding. */
+  overflow: hidden;
+}
+
+/* Where the node is full on paper. If the tiles stop short of this line the
+   scheduler still thinks there is room. */
+.commit-line {
+  position: absolute; top: -4px; bottom: -4px; width: 1px;
+  background: var(--ink-2); opacity: .5;
+  z-index: 4; pointer-events: none;
+}
+.commit-line::after {
+  content: attr(data-label);
+  position: absolute; top: -13px; left: 3px;
+  font-family: var(--mono); font-size: 9.5px; color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* The actual-usage bar, drawn under the tiles, spanning from the left edge.
+   This is the one that crosses lines the tiles do not. */
+.usage-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(180deg, rgba(63,167,162,.26), rgba(63,167,162,.12));
+  border-right: 2px solid var(--ok);
+  z-index: 1; pointer-events: none;
+  transition: width .7s cubic-bezier(.4,0,.2,1);
+}
+.usage-bar.hot {
+  background: linear-gradient(180deg, rgba(255,92,92,.3), rgba(255,92,92,.12));
+  border-right-color: var(--aggressor);
+}
+body[data-stage="1"] .usage-bar,
+body[data-stage="2"] .usage-bar { opacity: 0; }
+
+/* ---------- tiles ---------- */
+
+.tile {
+  position: relative;
+  z-index: 2;
+  min-width: 2px;
+  border-right: 1px solid rgba(11,14,20,.85);
+  border-top: 1.5px solid var(--ink-3);
+  border-bottom: 1.5px solid var(--ink-3);
+  background: rgba(255,255,255,.028);
+  transition: width .7s cubic-bezier(.4,0,.2,1), opacity .3s;
+  overflow: hidden;
+  cursor: default;
+}
+.tile:first-child { border-left: 1.5px solid var(--ink-3); }
+
+body[data-stage="1"] .tile,
+body[data-stage="2"] .tile {
+  border-color: var(--ink-3) !important;
+  border-style: solid !important;
+  background: rgba(255,255,255,.05) !important;
+}
+body[data-stage="1"] .tile { border-top-color: transparent !important; border-bottom-color: transparent !important; }
+
+.tile .name {
+  position: absolute; inset: 0;
+  display: flex; align-items: center;
+  padding: 0 5px;
+  font-family: var(--mono); font-size: 10px;
+  color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  z-index: 3;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  pointer-events: none;
+}
+
+/* The fill. Height is the share of the tile's own request that is actually
+   being consumed, so a fill at the ceiling means "using exactly what it asked
+   for" and a fill that breaks the ceiling is over-consumption. */
+.tile .fill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: var(--ok);
+  opacity: .5;
+  transition: height .7s cubic-bezier(.4,0,.2,1), background .4s;
+  z-index: 2;
+}
+body[data-stage="1"] .tile .fill,
+body[data-stage="2"] .tile .fill { height: 0 !important; }
+
+/* Over-consumption: the fill is capped at the tile but a spill band is drawn
+   above it, breaking the border. */
+.tile .spill {
+  position: absolute; left: 0; right: 0; top: -1.5px; height: 6px;
+  background: var(--aggressor);
+  box-shadow: 0 0 10px 2px rgba(255,92,92,.55);
+  z-index: 5;
+}
+body[data-stage="1"] .tile .spill,
+body[data-stage="2"] .tile .spill { display: none; }
+
+.tile.r-aggressor { border-color: var(--aggressor); background: rgba(255,92,92,.1); }
+.tile.r-aggressor .fill { background: var(--aggressor); opacity: .55; }
+
+.tile.r-stranded { border-style: dashed; border-color: var(--stranded); }
+.tile.r-stranded .fill { background: var(--stranded); opacity: .45; }
+
+.tile.r-throttled { border-color: var(--throttled); }
+.tile.r-throttled .fill { background: var(--throttled); opacity: .5; }
+/* The hatched cap: a lid the workload is being held under. */
+.tile.r-throttled::after {
+  content: "";
+  position: absolute; left: 0; right: 0; top: 0; height: 11px;
+  background: repeating-linear-gradient(
+    -45deg, var(--throttled) 0 2px, transparent 2px 5px);
+  opacity: .85; z-index: 4;
+}
+body[data-stage="1"] .tile.r-throttled::after,
+body[data-stage="2"] .tile.r-throttled::after { display: none; }
+
+.tile.r-oom { border-color: var(--oom); background: rgba(255,61,110,.12); }
+.tile.r-oom .fill { background: var(--oom); opacity: .55; }
+
+.tile.r-besteffort { border-style: dotted; border-color: var(--besteffort); }
+.tile.r-besteffort .fill { background: var(--besteffort); opacity: .45; }
+
+.tile.sys { opacity: .4; }
+.tile.sys .name { color: var(--ink-3); }
+
+/* The kill. A tile that just died flashes, so the moment is visible even if
+   you were looking at the other half of the screen. */
+@keyframes killflash {
+  0%   { background: var(--oom); box-shadow: 0 0 22px 6px rgba(255,61,110,.8); }
+  100% { background: rgba(255,61,110,.12); box-shadow: none; }
+}
+.tile.killed { animation: killflash 1.6s ease-out 2; }
+
+@keyframes arrive {
+  from { opacity: 0; transform: scaleX(.2); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+.tile.arrived { animation: arrive .55s cubic-bezier(.2,1.3,.4,1); transform-origin: left; }
+
+/* ---------- rail ---------- */
+
+#rail { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 108px; }
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.panel h2 {
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--line);
+  background: rgba(255,255,255,.018);
+}
+
+.findings { padding: 4px 0; max-height: 40vh; overflow-y: auto; }
+
+.finding {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(36,48,68,.5);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.finding:last-child { border-bottom: 0; }
+.finding .kind {
+  font-family: var(--mono); font-size: 9.5px;
+  text-transform: uppercase; letter-spacing: .07em;
+  padding-top: 2px;
+}
+.finding.aggressor .kind { color: var(--aggressor); }
+.finding.exposed   .kind { color: var(--throttled); }
+.finding .who { font-family: var(--mono); font-size: 11.5px; color: var(--ink); display: block; }
+.finding .what { color: var(--ink-2); }
+
+.quiet { color: var(--ink-3); font-size: 12px; padding: 10px 12px; margin: 0; font-style: italic; }
+
+.events { list-style: none; margin: 0; padding: 4px 0; max-height: 34vh; overflow-y: auto; }
+.events li {
+  padding: 6px 12px;
+  font-size: 11.5px;
+  font-family: var(--mono);
+  border-bottom: 1px solid rgba(36,48,68,.4);
+  display: grid; grid-template-columns: 52px minmax(0,1fr); gap: 8px;
+}
+.events li:last-child { border-bottom: 0; }
+.events .t { color: var(--ink-3); font-size: 10.5px; padding-top: 1px; }
+.events .msg { color: var(--ink-2); word-break: break-word; }
+.events .msg b { color: var(--ink); font-weight: 500; }
+.events li.oomkill .msg b { color: var(--oom); }
+.events li.throttle .msg b { color: var(--throttled); }
+.events li.added .msg b { color: var(--aggressor); }
+
+@keyframes newrow { from { background: rgba(255,61,110,.22); } to { background: transparent; } }
+.events li.fresh { animation: newrow 2.4s ease-out; }
+
+#notmeasured ul { margin: 0; padding: 8px 12px 10px 26px; font-size: 11.5px; color: var(--ink-2); }
+#notmeasured li { margin: 3px 0; }
+
+/* ---------- tenants table ---------- */
+
+#tenants { padding: 16px 20px 46px; }
+#tenants table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+#tenants th, #tenants td {
+  text-align: left; padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+#tenants th {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-3); font-weight: 600;
+}
+#tenants td.n, #tenants th.n { text-align: right; }
+#tenants tbody tr.sys { color: var(--ink-3); }
+#tenants td.bad { color: var(--oom); }
+#tenants td.warn { color: var(--throttled); }
+.foot { color: var(--ink-3); font-size: 11.5px; margin: 10px 0 0; font-family: var(--mono); }
+
+/* ---------- keys + toast ---------- */
+
+.tile .name { font-weight: 500; }
+
+#keys {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  padding: 7px 20px;
+  background: rgba(11,14,20,.94);
+  border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--ink-3);
+  font-family: var(--mono);
+  backdrop-filter: blur(6px);
+  z-index: 30;
+}
+kbd {
+  background: var(--panel); border: 1px solid var(--line-2);
+  border-bottom-width: 2px; border-radius: 3px;
+  padding: 1px 5px; margin: 0 2px 0 10px; color: var(--ink-2);
+  font-family: var(--mono); font-size: 10.5px;
+}
+#keys kbd:first-child { margin-left: 0; }
+
+#toast {
+  position: fixed; bottom: 46px; left: 50%; transform: translateX(-50%);
+  background: var(--panel); border: 1px solid var(--line-2);
+  border-radius: 6px; padding: 10px 16px;
+  font-family: var(--mono); font-size: 12.5px;
+  z-index: 40; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  max-width: 70ch;
+}
+#toast.err { border-color: var(--aggressor); color: #ffd9d9; }
+
+/* A projector at 1280 wide, or a laptop screen shared into a small window. */
+@media (max-width: 1180px) {
+  main { grid-template-columns: minmax(0,1fr); }
+  #rail { position: static; }
+  .findings, .events { max-height: none; }
+}
+@media (max-width: 760px) {
+  #legend { gap: 10px; font-size: 11px; }
+  .box { height: 48px; }
+  #tenants { overflow-x: auto; }
+}
+
+/* Elements the renderer hides must stay hidden regardless of author rules. */
+[hidden] { display: none !important; }

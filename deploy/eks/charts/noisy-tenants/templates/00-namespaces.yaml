@@ -1,0 +1,16 @@
+{{- range .Values.tenants }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "noisy.ns" . }}
+  labels:
+    lab.noisy-neighbors/tenant: "true"
+    lab.noisy-neighbors/role: {{ .role }}
+    # Enforced, not merely audited. These tenants abuse resources; they are
+    # not permitted to abuse privilege.
+    pod-security.kubernetes.io/enforce: {{ $.Values.podSecurityStandard }}
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: {{ $.Values.podSecurityStandard }}
+    pod-security.kubernetes.io/warn: {{ $.Values.podSecurityStandard }}
+{{- end }}

@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operating Kubernetes Multitenancy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+  /* Committed to light on purpose, and every color is painted explicitly so
+     the page holds whatever ground the host puts behind it.
+
+     Sized to one screen at 1280x720, which is what a webinar share actually
+     is. Everything scales with clamp() so a larger display gets a larger page
+     rather than the same page with more empty room. */
+  :root {
+    color-scheme: light;
+
+    --ground: #f6f8fc;
+    --panel: #ffffff;
+    --line: #dde4ef;
+    --rule: #c8d2e2;
+
+    --ink: #121a26;
+    --ink-2: #4b5869;
+    --ink-3: #7c8799;
+
+    --teal: #157a74;
+    --red: #cb3030;
+    --amber: #9a6510;
+
+    --display: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    min-height: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding-block: clamp(24px, 4.5vh, 56px);
+    padding-left: 24px;
+    padding-right: 24px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(20px, 3.6vh, 40px);
+  }
+
+  /* ---------- masthead ---------- */
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(30px, 4.6vw, 54px);
+    line-height: 1.03;
+    letter-spacing: -.028em;
+    text-wrap: balance;
+    margin: 0 0 12px;
+  }
+
+  .thesis {
+    font-size: clamp(15px, 1.55vw, 19px);
+    line-height: 1.45;
+    color: var(--ink-2);
+    max-width: 58ch;
+    margin: 0;
+  }
+  .thesis strong { color: var(--ink); font-weight: 650; }
+
+  /* ---------- the grammar ----------
+     The demo's whole vocabulary is one comparison, so it is taught here and
+     the live page does not have to spend its first minute on a legend. */
+
+  .grammar {
+    display: flex;
+    align-items: center;
+    gap: clamp(16px, 2.4vw, 30px);
+    flex-wrap: wrap;
+    padding: 14px 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+
+  .glyph { flex: none; }
+  .glyph .ring {
+    fill: none;
+    stroke: var(--ink-2);
+    stroke-width: 1.8;
+    stroke-dasharray: 5 4;
+  }
+  /* Rests on the state that carries the meaning: a disc that has outgrown the
+     request it declared. Thumbnails and reduced motion both land here. */
+  .glyph .disc { fill: var(--red); fill-opacity: .6; r: 25px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    @keyframes swell {
+      0%, 16%  { r: 25px; fill-opacity: .62; }
+      52%, 64% { r: 9px;  fill-opacity: .45; }
+      100%     { r: 25px; fill-opacity: .62; }
+    }
+    .glyph .disc { animation: swell 7s cubic-bezier(.45,0,.35,1) infinite; }
+  }
+
+  .legend { display: flex; gap: clamp(14px, 2.2vw, 28px); flex-wrap: wrap; }
+  .legend div {
+    display: flex; align-items: center; gap: 9px;
+    font-size: clamp(13px, 1.25vw, 15px);
+    color: var(--ink-2);
+  }
+  .legend b { color: var(--ink); font-weight: 650; }
+
+  /* ---------- the five segments ----------
+     Across, not down: five short columns cost a fifth of the vertical space a
+     list would, which is what keeps the page on one screen. Numbered because
+     it is a real sequence, each segment only landing once the one before it
+     has. No cards: a hairline over each column is enough structure. */
+
+  .segments {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: clamp(12px, 1.8vw, 26px);
+  }
+
+  .segments li {
+    border-top: 2px solid var(--rule);
+    padding-top: 12px;
+  }
+
+  .num {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 6px;
+  }
+
+  .segments h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(16px, 1.75vw, 21px);
+    letter-spacing: -.012em;
+    line-height: 1.15;
+    margin: 0 0 5px;
+  }
+
+  .segments p {
+    margin: 0;
+    font-size: clamp(13px, 1.2vw, 15px);
+    line-height: 1.42;
+    color: var(--ink-2);
+  }
+
+  /* Semantic color, spent only on the two words the audience will watch
+     happen on screen. */
+  .agg { color: var(--red); font-weight: 650; }
+  .thr { color: var(--amber); font-weight: 650; }
+
+  @media (max-width: 860px) {
+    .segments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .page { justify-content: flex-start; }
+  }
+  @media (max-width: 480px) {
+    .segments { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <p class="eyebrow">Live demo</p>
+    <h1>Operating Kubernetes multitenancy</h1>
+    <p class="thesis">
+      What a workload <strong>asks for</strong> and what it
+      <strong>actually uses</strong> are two different numbers. The scheduler,
+      your quotas and your cost model all run on the first one.
+    </p>
+  </header>
+
+  <div class="grammar">
+    <svg class="glyph" width="66" height="66" viewBox="0 0 66 66" aria-hidden="true">
+      <circle class="disc" cx="33" cy="33" r="25"></circle>
+      <circle class="ring" cx="33" cy="33" r="16"></circle>
+    </svg>
+    <div class="legend">
+      <div>
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#7c8799"
+                  stroke-width="1.7" stroke-dasharray="4 3"></circle>
+        </svg>
+        <span><b>Ring</b> &mdash; what it asked for</span>
+      </div>
+      <div>
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.5" fill="#cb3030" fill-opacity="0.5"></circle>
+        </svg>
+        <span><b>Disc</b> &mdash; what it is using</span>
+      </div>
+    </div>
+  </div>
+
+  <ol class="segments">
+    <li>
+      <span class="num">01</span>
+      <h2>The problem</h2>
+      <p>Requests are a promise nobody audits.</p>
+    </li>
+    <li>
+      <span class="num">02</span>
+      <h2>See it</h2>
+      <p>One node, five tenants, live.</p>
+    </li>
+    <li>
+      <span class="num">03</span>
+      <h2>Name it</h2>
+      <p>Which tenant is the <span class="agg">aggressor</span>, and who is <span class="thr">exposed</span>.</p>
+    </li>
+    <li>
+      <span class="num">04</span>
+      <h2>Fix it</h2>
+      <p>Right-size pods, then nodes. Continuously.</p>
+    </li>
+    <li>
+      <span class="num">05</span>
+      <h2>Pay for it</h2>
+      <p>Allocation built on requests is guesswork.</p>
+    </li>
+  </ol>
+
+</div>
+
+</body>
+</html>
