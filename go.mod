@@ -5,11 +5,11 @@ go 1.27.1
 require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.46.0
-	k8s.io/api v0.37.0
-	k8s.io/apimachinery v0.37.0
-	k8s.io/cli-runtime v0.37.0
-	k8s.io/client-go v0.37.0
-	k8s.io/metrics v0.37.0
+	k8s.io/api v0.37.1
+	k8s.io/apimachinery v0.37.1
+	k8s.io/cli-runtime v0.37.1
+	k8s.io/client-go v0.37.1
+	k8s.io/metrics v0.37.1
 )
 
 require (
